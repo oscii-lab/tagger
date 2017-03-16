@@ -2,6 +2,9 @@
 
 import itertools
 import functools
+import json
+import os
+from datetime import datetime
 
 import numpy as np
 np.random.seed(1337)  # for reproducibility
@@ -21,18 +24,19 @@ from loss import *
 from tags import *
 from subwords import *
 
-# print('Vocab size:', len(word_map.word_counts))
-# print('Tag set size:', len(tag_map.word_counts))
+print('Vocab size:', len(word_map.word_counts))
+print('Tag set size:', len(tag_map.word_counts))
 
 len(texts)
 len(tag_seqs)
 
 size = '8k'
+max_subwords = 10
 subword_paths = [
     'data/ptb_all.' + size + '.txt',
     'data/web_all.' + size + '.txt',
     ]
-subword_map, subworder = map_and_subworder(texts, subword_paths)
+subword_map, subworder = map_and_subworder(texts, subword_paths, max_subwords)
 
 # %%
 # Build a model.
@@ -41,7 +45,7 @@ num_words = len(word_map.word_index)+1
 num_subwords = len(subword_map.word_index)+1
 num_tags = len(tag_map.word_index)+1
 max_len = max(w.count(' ') + 1 for w in subworder.keys())
-max_subwords = max(w.count(' ') + 1 for s in subworder.values() for w in s)
+# max_subwords = max(w.count(' ') + 1 for s in subworder.values() for w in s)
 word_size = 64
 
 # Embed each subword
@@ -90,13 +94,37 @@ def prep_subword(sentence):
 x, y = prep(tagged_sents([ptb_train]))
 val = prep(tagged_sents([ptb_dev]))
 test = prep(tagged_sents([ptb_test]))
-webs = [prep(tagged_sents([w])) for w in web_all]
+web_tests = [prep(tagged_sents([w])) for w in web_all]
 
 # %%
 
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
                                min_delta=0.001, patience=2, verbose=1)
-model.fit(x, y, batch_size=32, nb_epoch=100, verbose=1, validation_data=val, callbacks=[early_stopping])
+history = model.fit(x, y, batch_size=32, nb_epoch=100, verbose=1,
+                    validation_data=val, callbacks=[early_stopping])
 
-for name, data in zip(['val', 'test'] + web_genres, [val, test] + webs):
-    print('{}: loss: {:0.4f} - acc: {:0.4f}'.format(name, *model.evaluate(*data, verbose=2)))
+losses = []
+for name, data in zip(['val', 'test'] + web_genres, [val, test] + web_tests):
+    loss = model.evaluate(*data, verbose=2)
+    losses.append((name, loss))
+    print('{}: loss: {:0.4f} - acc: {:0.4f}'.format(name, *loss))
+
+# %%
+# Save everything
+
+output_dir = datetime.today().strftime('exp/%y%m%d_%H%M%S')
+
+if not os.path.exists('exp'):
+    os.mkdir('exp')
+os.mkdir(output_dir)
+
+with open(output_dir + '/model.json', 'w') as jout:
+    jout.write(model.to_json())
+
+model.save(output_dir + '/model.h5')
+
+with open(output_dir + '/history.json', 'w') as jout:
+    json.dump(history, jout)
+
+with open(output_dir + '/loss.json', 'w') as jout:
+    json.dump(loss, jout)
