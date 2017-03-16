@@ -136,4 +136,6 @@ with open(output_dir + '/history.json', 'w') as jout:
     pickle.dump(history.history, jout)
 
 with open(output_dir + '/loss.json', 'w') as jout:
-    json.dump(loss, jout)
+    json.dump(losses, jout)
+
+shutil.copyfile('tagger.py', output_dir + '/tagger.py')
