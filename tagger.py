@@ -4,6 +4,8 @@ import itertools
 import functools
 import json
 import os
+import pickle
+import sys
 from datetime import datetime
 
 import numpy as np
@@ -27,15 +29,16 @@ from subwords import *
 print('Vocab size:', len(word_map.word_counts))
 print('Tag set size:', len(tag_map.word_counts))
 
-len(texts)
-len(tag_seqs)
-
 size = '8k'
 max_subwords = 10
 subword_paths = [
     'data/ptb_all.' + size + '.txt',
     'data/web_all.' + size + '.txt',
     ]
+
+if len(sys.argv) > 1:
+    subword_paths = sys.argv
+
 subword_map, subworder = map_and_subworder(texts, subword_paths, max_subwords)
 
 # %%
@@ -123,8 +126,8 @@ with open(output_dir + '/model.json', 'w') as jout:
 
 model.save(output_dir + '/model.h5')
 
-with open(output_dir + '/history.json', 'w') as jout:
-    json.dump(history, jout)
+with open(output_dir + '/history.pkl', 'w') as pout:
+    pickle.dump(history, pout)
 
 with open(output_dir + '/loss.json', 'w') as jout:
     json.dump(loss, jout)
