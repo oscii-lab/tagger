@@ -94,7 +94,8 @@ def prep_subword(sentence):
     padding = np.zeros([max_len-len(subs), max_subwords])
     return np.append(padding, padded_subs, axis=0).astype(np.int32)
 
-x, y = prep(tagged_sents([ptb_train]))
+x, y = prep(itertools.islice(tagged_sents([ptb_train]), 0, 1000))
+# x, y = prep(tagged_sents([ptb_train]))
 val = prep(tagged_sents([ptb_dev]))
 test = prep(tagged_sents([ptb_test]))
 web_tests = [prep(tagged_sents([w])) for w in web_all]
@@ -103,14 +104,19 @@ web_tests = [prep(tagged_sents([w])) for w in web_all]
 
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
                                min_delta=0.001, patience=2, verbose=1)
-history = model.fit(x, y, batch_size=32, nb_epoch=100, verbose=1,
+history = model.fit(x, y, batch_size=32, nb_epoch=1, verbose=1,
                     validation_data=val, callbacks=[early_stopping])
 
 losses = []
+accs = []
 for name, data in zip(['val', 'test'] + web_genres, [val, test] + web_tests):
     loss = model.evaluate(*data, verbose=2)
     losses.append((name, loss))
+    accs.append('{:0.4f}'.format(loss[1]))
     print('{}: loss: {:0.4f} - acc: {:0.4f}'.format(name, *loss))
+
+print('\t'.join(accs))
+
 
 # %%
 # Save everything
@@ -126,8 +132,8 @@ with open(output_dir + '/model.json', 'w') as jout:
 
 model.save(output_dir + '/model.h5')
 
-with open(output_dir + '/history.pkl', 'w') as pout:
-    pickle.dump(history, pout)
+with open(output_dir + '/history.json', 'w') as jout:
+    pickle.dump(history.history, jout)
 
 with open(output_dir + '/loss.json', 'w') as jout:
     json.dump(loss, jout)
