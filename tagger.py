@@ -138,6 +138,6 @@ with open(output_dir + '/info.json', 'w') as jout:
         'losses': losses,
         'sys.argv': sys.argv
     }
-    json.dump(info, jout)
+    json.dump(info, jout, indent=2)
 
 shutil.copyfile('tagger.py', output_dir + '/tagger.py')
