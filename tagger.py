@@ -132,10 +132,12 @@ with open(output_dir + '/model.json', 'w') as jout:
 
 model.save(output_dir + '/model.h5')
 
-with open(output_dir + '/history.json', 'w') as jout:
-    json.dump(history.history, jout)
-
-with open(output_dir + '/loss.json', 'w') as jout:
-    json.dump(losses, jout)
+with open(output_dir + '/info.json', 'w') as jout:
+    info = {
+        'history': history.history,
+        'losses': losses,
+        'sys.argv': sys.argv
+    }
+    json.dump(info, jout)
 
 shutil.copyfile('tagger.py', output_dir + '/tagger.py')
