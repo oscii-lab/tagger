@@ -94,8 +94,7 @@ def prep_subword(sentence):
     padding = np.zeros([max_len-len(subs), max_subwords])
     return np.append(padding, padded_subs, axis=0).astype(np.int32)
 
-x, y = prep(itertools.islice(tagged_sents([ptb_train]), 0, 1000))
-# x, y = prep(tagged_sents([ptb_train]))
+x, y = prep(tagged_sents([ptb_train]))
 val = prep(tagged_sents([ptb_dev]))
 test = prep(tagged_sents([ptb_test]))
 web_tests = [prep(tagged_sents([w])) for w in web_all]
@@ -104,7 +103,7 @@ web_tests = [prep(tagged_sents([w])) for w in web_all]
 
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
                                min_delta=0.001, patience=2, verbose=1)
-history = model.fit(x, y, batch_size=32, nb_epoch=1, verbose=1,
+history = model.fit(x, y, batch_size=32, nb_epoch=100, verbose=1,
                     validation_data=val, callbacks=[early_stopping])
 
 losses = []
