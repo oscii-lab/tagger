@@ -37,7 +37,7 @@ subword_paths = [
     ]
 
 if len(sys.argv) > 1:
-    subword_paths = sys.argv
+    subword_paths = sys.argv[1:]
 
 subword_map, subworder = map_and_subworder(texts, subword_paths, max_subwords)
 
