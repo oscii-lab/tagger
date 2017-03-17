@@ -4,7 +4,6 @@ import itertools
 import functools
 import json
 import os
-import pickle
 import sys
 from datetime import datetime
 
@@ -133,7 +132,7 @@ with open(output_dir + '/model.json', 'w') as jout:
 model.save(output_dir + '/model.h5')
 
 with open(output_dir + '/history.json', 'w') as jout:
-    pickle.dump(history.history, jout)
+    json.dump(history.history, jout)
 
 with open(output_dir + '/loss.json', 'w') as jout:
     json.dump(losses, jout)
