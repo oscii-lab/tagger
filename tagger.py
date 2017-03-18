@@ -29,8 +29,10 @@ from subwords import *
 print('Vocab size:', len(word_map.word_counts))
 print('Tag set size:', len(tag_map.word_counts))
 
+# %%
+# Load subwords
+
 size = '8k'
-max_subwords = 10
 subword_paths = [
     'data/ptb_all.' + size + '.txt',
     'data/web_all.' + size + '.txt',
@@ -39,6 +41,8 @@ subword_paths = [
 if len(sys.argv) > 1:
     subword_paths = sys.argv[1:]
 
+max_subwords = 8
+print('subword_paths:', subword_paths)
 subword_map, subworder = map_and_subworder(texts, subword_paths, max_subwords)
 
 # %%
@@ -102,7 +106,7 @@ web_tests = [prep(tagged_sents([w])) for w in web_all]
 # %%
 
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
-                               min_delta=0.001, patience=2, verbose=1)
+                               min_delta=0.0005, patience=0, verbose=1)
 history = model.fit(x, y, batch_size=32, nb_epoch=100, verbose=1,
                     validation_data=val, callbacks=[early_stopping])
 
