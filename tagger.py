@@ -161,7 +161,7 @@ def train(model):
     return model.fit(x, y, batch_size=32, nb_epoch=4, verbose=1,
                      validation_data=val, callbacks=[early_stopping]).history
 
-def evaluate(label, model, history, exp_dir='exp2'):
+def evaluate(label, model, history, exp_dir='exp'):
     """Evaluate a labeled model on all test sets and save it."""
     print('Evaluating', label)
     losses = []
