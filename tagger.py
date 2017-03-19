@@ -64,8 +64,8 @@ def join(subwords):
 max_subwords = 10
 print('subword_paths:', subword_paths)
 sub_with = lambda f: map_and_subworder(texts, subword_paths, max_subwords, f)
-subword_map1, subworder1 = sub_with(last_delimiter)
-subword_map2, subworder2 = sub_with(no_delimiter)
+subword_map1, subworder1 = sub_with(None)
+subword_map2, subworder2 = sub_with(None)
 
 print(subworder1[texts[0]])
 print(subworder2[texts[0]])
@@ -116,7 +116,7 @@ def make(drop1, drop2):
 
 # Note: Put just one (label, model) pair in models for a simple experiment.
 models = []
-drops = [[0, 0], [0.1, 0.1], [0.2, 0.2], [0.2, 0.1]]
+drops = [[0, 0], [0.2, 0.2]]
 for drop in drops:
     models.append((str(drop), make(*drop)))
 
