@@ -96,9 +96,9 @@ def make(dropout=0, k=1, tag_twice=False):
 # Note: Put just one (label, model) pair in models for a simple experiment.
 repetitions = range(8)
 models = [(str([0.0, k, 'tag_once']), make(0.0, 1, False)) for k in repetitions]
-models = [(str([0.2, k, 'tag_once']), make(0.2, 2, False)) for k in repetitions]
-models = [(str([0.0, k, 'tag_twice']), make(0.0, 1, True)) for k in repetitions]
-models = [(str([0.2, k, 'tag_twice']), make(0.2, 2, True)) for k in repetitions]
+models += [(str([0.2, k, 'tag_once']), make(0.2, 2, False)) for k in repetitions]
+models += [(str([0.0, k, 'tag_twice']), make(0.0, 1, True)) for k in repetitions]
+models += [(str([0.2, k, 'tag_twice']), make(0.2, 2, True)) for k in repetitions]
 
 # %%
 # Prepare data format for model.
