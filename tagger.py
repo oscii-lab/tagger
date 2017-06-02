@@ -8,6 +8,7 @@ import shutil
 import sys
 from datetime import datetime
 
+from argparse import ArgumentParser
 import numpy as np
 np.random.seed(1337)  # for reproducibility
 import tensorflow as tf
@@ -21,6 +22,7 @@ from keras.objectives import categorical_crossentropy
 from keras.metrics import categorical_accuracy
 from keras.utils import np_utils
 from keras import backend as K
+
 
 from loss import *
 from tags import *
@@ -38,8 +40,20 @@ subword_paths = [
     'data/web_all.' + size + '.txt',
     ]
 
-if len(sys.argv) > 1 and not sys.argv[1] == '-f':
-    subword_paths = sys.argv[1:]
+
+
+parser = ArgumentParser()
+parser.add_argument("-f", "--filename",dest='subword_paths', help="Path for subwords")
+parser.add_argument("-e", "--encoder",choices=["conv","lstm"],help="Choose convolutional or BiLSTM encoder")
+
+
+args = parser.parse_args()
+
+
+if args.subword_paths is not None:
+    subword_paths = options.subword_paths
+
+
 
 max_subwords = 10
 print('subword_paths:', subword_paths)
@@ -59,6 +73,19 @@ word_size = 64
 
 subwords = Input(shape=(max_len, max_subwords), dtype='int32')
 
+def encoder(x):
+    if args.encoder == "conv":
+        encoded = Convolution1D(word_size, 5, border_mode='same')(x)
+    elif args.encoder == "lstm":
+        encoded = LSTM(word_size,return_sequences=True)(x)
+    else:
+        print('Encoder not supported')
+        raise ValueError
+    return encoded
+
+
+
+
 def make(dropout=0, k=1, tag_twice=False):
     # Embed each subword k times
     embedded_subwords_list = []
@@ -74,8 +101,9 @@ def make(dropout=0, k=1, tag_twice=False):
     embedded_words = TimeDistributed(LSTM(word_size))(embedded_subwords)
 
     # Build a convolutional network
-    convolved_words = Convolution1D(word_size, 5, border_mode='same')(embedded_words)
-    merged_words = merge([embedded_words, convolved_words], mode='sum')
+    encoded_words = encoder(embedded_words)
+
+    merged_words = merge([embedded_words, encoded_words], mode='sum')
 
     # Predict tags from words
     tagger = Dense(num_tags, activation='softmax')
