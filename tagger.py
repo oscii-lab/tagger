@@ -70,16 +70,18 @@ num_subwords = len(subword_map.word_index) + 1
 num_tags = len(tag_map.word_index) + 1
 max_len = max(w.count(' ') + 1 for w in texts)
 # max_subwords = max(w.count(' ') + 1 for s in subworder.values() for w in s)
-word_size = 50
+lstm_size = 150
+char_size = 50
+
 
 
 subwords = Input(shape=(max_len, max_subwords), dtype='int32')
 
 def encoder(x):
     if args.encoder == "conv":
-        encoded = Convolution1D(word_size, 5, border_mode='same')(x)
+        encoded = Convolution1D(lstm_size, 5, border_mode='same')(x)
     elif args.encoder == "lstm":
-        encoded = LSTM(word_size,return_sequences=True)(x)
+        encoded = LSTM(lstm_size,return_sequences=True)(x)
     else:
         print('Encoder not supported')
         raise ValueError
@@ -92,7 +94,7 @@ def make(dropout=0, k=1, tag_twice=False):
     # Embed each subword k times
     embedded_subwords_list = []
     for _ in range(k):
-        e = Embedding(input_dim=num_subwords, output_dim=word_size, mask_zero=True, dropout=dropout)
+        e = Embedding(input_dim=num_subwords, output_dim=char_size, mask_zero=True, dropout=dropout)
         embedded_subwords_list.append(TimeDistributed(e)(subwords))
     if k == 1:
         embedded_subwords = embedded_subwords_list[0]
@@ -100,7 +102,7 @@ def make(dropout=0, k=1, tag_twice=False):
         embedded_subwords = merge(embedded_subwords_list, mode='sum')
 
     # Embed each subword sequence into a word vector.
-    embedded_words = TimeDistributed(LSTM(word_size))(embedded_subwords)
+    embedded_words = TimeDistributed(LSTM(lstm_size))(embedded_subwords)
 
     # Build a convolutional network
     encoded_words = encoder(embedded_words)
@@ -113,7 +115,7 @@ def make(dropout=0, k=1, tag_twice=False):
 
     # Predict tags again from words and tags
     if tag_twice:
-        convolved_tags = Convolution1D(word_size, 5, border_mode='same')(tags)
+        convolved_tags = Convolution1D(lstm_size, 5, border_mode='same')(tags)
         merged = merge([merged_words, convolved_tags], mode='sum')
         tags = tagger(merged)
 
@@ -170,7 +172,7 @@ web_tests = [prep(tagged_sents([w])) for w in web_all]
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
                                min_delta=0.0005, patience=0, verbose=1)
 def train(model):
-    return model.fit(x, y, batch_size=32, nb_epoch=32, verbose=1,
+    return model.fit(x, y, batch_size=100, nb_epoch=32, verbose=1,
                      validation_data=val, callbacks=[early_stopping]).history
 
 def evaluate(label, model, history, exp_dir='exp'):
