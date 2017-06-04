@@ -110,7 +110,7 @@ def make(dropout=0, k=1, tag_twice=False):
 
     # Build a convolutional network
     bi_encoded_words = encoder(embedded_words)
-    encoded_words = TimeDistributed(Dense(lstm_size))(bi_encoded_words)
+    encoded_words = TimeDistributed(Dense(lstm_size,activation='tanh'))(bi_encoded_words)
 
     # Predict tags from words
     tagger = Dense(num_tags, activation='softmax')
