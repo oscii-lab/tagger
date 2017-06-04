@@ -12,11 +12,19 @@ from nltk.corpus import BracketParseCorpusReader as reader
 # - https://catalog.ldc.upenn.edu/LDC2012T13 (English Web Treebank)
 
 # Standard part-of-speech tagging train/dev/test split
-ptb_root = 'data/eng_news_txt_tbnk-ptb_revised/data/penntree'
-ptb_train = reader(ptb_root, r'(0[0-9]|1[0-8])/.*tree')
-ptb_dev = reader(ptb_root, r'(19|20|21)/wsj_.*tree')
-ptb_test = reader(ptb_root, r'(22|23|24)/wsj_.*tree')
-ptb_all = reader(ptb_root, r'[0-9]*/wsj_.*tree')
+ptb_root = 'data/eng_news_txt_tbnk-ptb'
+# ptb_root = 'data/eng_news_txt_tbnk-ptb_revised/data/penntree'
+#
+# ptb_train = reader(ptb_root, r'(0[0-9]|1[0-8])/.*tree')
+# ptb_dev = reader(ptb_root, r'(19|20|21)/wsj_.*tree')
+# ptb_test = reader(ptb_root, r'(22|23|24)/wsj_.*tree')
+# ptb_all = reader(ptb_root, r'[0-9]*/wsj_.*tree')
+
+ptb_train = reader(ptb_root, r'(0[0-9]|1[0-8])/.*mrg')
+ptb_dev = reader(ptb_root, r'(19|20|21)/wsj_.*mrg')
+ptb_test = reader(ptb_root, r'(22|23|24)/wsj_.*mrg')
+ptb_all = reader(ptb_root, r'[0-9]*/wsj_.*mrg')
+
 
 web_root = 'data/eng_web_tbk/data'
 web_genres = ['answers', 'email', 'newsgroup', 'reviews', 'weblog']

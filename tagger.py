@@ -21,6 +21,7 @@ from keras.callbacks import EarlyStopping
 from keras.objectives import categorical_crossentropy
 from keras.metrics import categorical_accuracy
 from keras.utils import np_utils
+from keras import optimizers
 from keras import backend as K
 
 
@@ -55,7 +56,7 @@ if args.subword_paths is not None:
 
 
 
-max_subwords = 10
+max_subwords = 25
 print('subword_paths:', subword_paths)
 subword_map, subworder = map_and_subworder(texts, subword_paths, max_subwords)
 
@@ -69,7 +70,8 @@ num_subwords = len(subword_map.word_index) + 1
 num_tags = len(tag_map.word_index) + 1
 max_len = max(w.count(' ') + 1 for w in texts)
 # max_subwords = max(w.count(' ') + 1 for s in subworder.values() for w in s)
-word_size = 64
+word_size = 50
+
 
 subwords = Input(shape=(max_len, max_subwords), dtype='int32')
 
@@ -115,8 +117,10 @@ def make(dropout=0, k=1, tag_twice=False):
         merged = merge([merged_words, convolved_tags], mode='sum')
         tags = tagger(merged)
 
+    sgd = optimizers.SGD(lr=0.2, momentum=0.95)
     model = Model(input=subwords, output=tags)
-    model.compile(optimizer='adam',
+
+    model.compile(optimizer=sgd,
                   loss=padded_categorical_crossentropy,
                   metrics=[padded_categorical_accuracy])
     return model, tags
@@ -124,9 +128,10 @@ def make(dropout=0, k=1, tag_twice=False):
 # Note: Put just one (label, model) pair in models for a simple experiment.
 repetitions = range(8)
 models = [(str([0.0, k, 'tag_once']), make(0.0, 1, False)) for k in repetitions]
-models += [(str([0.2, k, 'tag_once']), make(0.2, 2, False)) for k in repetitions]
-models += [(str([0.0, k, 'tag_twice']), make(0.0, 1, True)) for k in repetitions]
-models += [(str([0.2, k, 'tag_twice']), make(0.2, 2, True)) for k in repetitions]
+# models += [(str([0.2, k, 'tag_once']), make(0.2, 2, False)) for k in repetitions]
+# models += [(str([0.0, k, 'tag_twice']), make(0.0, 1, True)) for k in repetitions]
+# models += [(str([0.2, k, 'tag_twice']), make(0.2, 2, True)) for k in repetitions]
+# models = [(str([0.2, k, 'tag_twice']), make(0.2, 2, True)) for k in repetitions]
 
 # %%
 # Prepare data format for model.
@@ -165,7 +170,7 @@ web_tests = [prep(tagged_sents([w])) for w in web_all]
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
                                min_delta=0.0005, patience=0, verbose=1)
 def train(model):
-    return model.fit(x, y, batch_size=32, nb_epoch=4, verbose=1,
+    return model.fit(x, y, batch_size=32, nb_epoch=32, verbose=1,
                      validation_data=val, callbacks=[early_stopping]).history
 
 def evaluate(label, model, history, exp_dir='exp'):
