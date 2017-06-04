@@ -71,6 +71,7 @@ num_tags = len(tag_map.word_index) + 1
 max_len = max(w.count(' ') + 1 for w in texts)
 # max_subwords = max(w.count(' ') + 1 for s in subworder.values() for w in s)
 lstm_size = 150
+word_dim = 50
 char_size = 50
 
 
@@ -105,7 +106,7 @@ def make(dropout=0, k=1, tag_twice=False):
 
     # Embed each subword sequence into a word vector.
     bi_embedded_words = TimeDistributed(Bidirectional(LSTM(lstm_size)))(embedded_subwords)
-    embedded_words = TimeDistributed(Dense(lstm_size))(bi_embedded_words)
+    embedded_words = TimeDistributed(Dense(word_dim))(bi_embedded_words)
 
     # Build a convolutional network
     bi_encoded_words = encoder(embedded_words)
