@@ -81,7 +81,7 @@ def encoder(x):
     if args.encoder == "conv":
         encoded = Convolution1D(lstm_size, 5, border_mode='same')(x)
     elif args.encoder == "lstm":
-        encoded = LSTM(lstm_size,return_sequences=True)(x)
+        encoded = Bidirectional(LSTM(lstm_size,return_sequences=True))(x)
     else:
         print('Encoder not supported')
         raise ValueError
@@ -102,7 +102,7 @@ def make(dropout=0, k=1, tag_twice=False):
         embedded_subwords = merge(embedded_subwords_list, mode='sum')
 
     # Embed each subword sequence into a word vector.
-    embedded_words = TimeDistributed(LSTM(lstm_size))(embedded_subwords)
+    embedded_words = TimeDistributed(Bidirectional(LSTM(lstm_size)))(embedded_subwords)
 
     # Build a convolutional network
     encoded_words = encoder(embedded_words)
