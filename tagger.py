@@ -80,6 +80,8 @@ subwords = Input(shape=(max_len, max_subwords), dtype='int32')
 def encoder(x):
     if args.encoder == "conv":
         encoded = Convolution1D(lstm_size, 5, border_mode='same')(x)
+        print('Encoder not supported')
+        raise ValueError
     elif args.encoder == "lstm":
         encoded = Bidirectional(LSTM(lstm_size,return_sequences=True))(x)
     else:
@@ -102,22 +104,16 @@ def make(dropout=0, k=1, tag_twice=False):
         embedded_subwords = merge(embedded_subwords_list, mode='sum')
 
     # Embed each subword sequence into a word vector.
-    embedded_words = TimeDistributed(Bidirectional(LSTM(lstm_size)))(embedded_subwords)
+    bi_embedded_words = TimeDistributed(Bidirectional(LSTM(lstm_size)))(embedded_subwords)
+    embedded_words = TimeDistributed(Dense(lstm_size))(bi_embedded_words)
 
     # Build a convolutional network
-    encoded_words = encoder(embedded_words)
-
-    merged_words = merge([embedded_words, encoded_words], mode='sum')
+    bi_encoded_words = encoder(embedded_words)
+    encoded_words = TimeDistributed(Dense(lstm_size))(bi_encoded_words)
 
     # Predict tags from words
     tagger = Dense(num_tags, activation='softmax')
-    tags = tagger(merged_words)
-
-    # Predict tags again from words and tags
-    if tag_twice:
-        convolved_tags = Convolution1D(lstm_size, 5, border_mode='same')(tags)
-        merged = merge([merged_words, convolved_tags], mode='sum')
-        tags = tagger(merged)
+    tags = tagger(encoded_words)
 
     sgd = optimizers.SGD(lr=0.2, momentum=0.95)
     model = Model(input=subwords, output=tags)
