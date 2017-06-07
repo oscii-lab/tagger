@@ -51,8 +51,8 @@ args = parser.parse_args()
 
 
 if args.subword_paths is not None:
-    subword_paths = options.subword_paths
-
+    #subword_paths = options.subword_paths
+    subword_paths[0] = args.subword_paths
 
 
 max_subwords = 10
@@ -77,7 +77,8 @@ def encoder(x):
     if args.encoder == "conv":
         encoded = Convolution1D(word_size, 5, border_mode='same')(x)
     elif args.encoder == "lstm":
-        encoded = LSTM(word_size,return_sequences=True)(x)
+        #encoded = LSTM(word_size,return_sequences=True)(x)
+        encoded = Bidirectional(LSTM(word_size,return_sequences=True), merge_mode='sum')(x)
     else:
         print('Encoder not supported')
         raise ValueError
@@ -111,7 +112,8 @@ def make(dropout=0, k=1, tag_twice=False):
 
     # Predict tags again from words and tags
     if tag_twice:
-        convolved_tags = Convolution1D(word_size, 5, border_mode='same')(tags)
+        #convolved_tags = Convolution1D(word_size, 5, border_mode='same')(tags)
+        convolved_tags = encoder(tags)
         merged = merge([merged_words, convolved_tags], mode='sum')
         tags = tagger(merged)
 
@@ -123,6 +125,7 @@ def make(dropout=0, k=1, tag_twice=False):
 
 # Note: Put just one (label, model) pair in models for a simple experiment.
 repetitions = range(8)
+#repetitions = range(1)
 models = [(str([0.0, k, 'tag_once']), make(0.0, 1, False)) for k in repetitions]
 models += [(str([0.2, k, 'tag_once']), make(0.2, 2, False)) for k in repetitions]
 models += [(str([0.0, k, 'tag_twice']), make(0.0, 1, True)) for k in repetitions]
