@@ -26,9 +26,9 @@ ptb_test = reader(ptb_root, r'(22|23|24)/wsj_.*mrg')
 ptb_all = reader(ptb_root, r'[0-9]*/wsj_.*mrg')
 
 
-web_root = 'data/eng_web_tbk/data'
-web_genres = ['answers', 'email', 'newsgroup', 'reviews', 'weblog']
-web_all = [reader(web_root, g + r'/penntree/.*tree') for g in web_genres]
+# web_root = 'data/eng_web_tbk/data'
+# web_genres = ['answers', 'email', 'newsgroup', 'reviews', 'weblog']
+# web_all = [reader(web_root, g + r'/penntree/.*tree') for g in web_genres]
 
 # %%
 # Index all types as integers.
@@ -39,7 +39,7 @@ def tagged_sents(corpora):
         for ts in corpus.tagged_sents():
             yield [(w, t) for w, t in ts if t != '-NONE-']
 
-all_tagged = list(tagged_sents([ptb_all] + list(web_all)))
+all_tagged = list(tagged_sents([ptb_all])) # + list(web_all)))
 texts = [str(' '.join(w for w, _ in s)) for s in all_tagged]
 tag_seqs = [str(' '.join(t for _, t in s)) for s in all_tagged]
 
