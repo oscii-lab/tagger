@@ -74,10 +74,13 @@ def create_model():
 
     return for_input
 
+@functools.lru_cache(None)
+def input_for_len(sentence_len):
+    return Input(shape=(sentence_len, max_word_len), dtype='int32')
+
 def model_for_length(sentence_len, model_for_input=create_model()):
     """Return a model for a maximum sentence length."""
-    chars = Input(shape=(sentence_len, max_word_len), dtype='int32')
-    return model_for_input(chars)
+    return model_for_input(input_for_len(sentence_len))
 
 # %%
 # Prepare data format for model.
@@ -221,7 +224,7 @@ class MultiModel(Model):
             return object.__getattribute__(self, name)
 
         a = self.example_model.__getattribute__(name)
-        if hasattr(a, '__func__'):
+        if hasattr(a, '__func__'): # It's a method!
             varnames = a.__func__.__code__.co_varnames
             if 'x' in varnames:
                 x_pos = varnames.index('x')
