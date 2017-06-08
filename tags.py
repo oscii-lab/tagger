@@ -46,5 +46,9 @@ tag_seqs = [str(' '.join(t for _, t in s)) for s in all_tagged]
 word_map = Tokenizer(lower=False, filters='')
 word_map.fit_on_texts(texts)
 
+char_seqs = [' '.join(w) for w in word_map.word_index.keys()]
+char_map = Tokenizer(lower=False, filters='')
+char_map.fit_on_texts(char_seqs)
+
 tag_map = Tokenizer(lower=False, filters='')
 tag_map.fit_on_texts(tag_seqs)
