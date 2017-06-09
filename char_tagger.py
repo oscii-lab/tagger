@@ -68,7 +68,8 @@ def create_model():
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
 
-    optimizer = optimizers.SGD(lr=0.2, momentum=0.95)
+    #optimizer = optimizers.SGD(lr=0.2, momentum=0.95)
+    optimizer = optimizers.Adam()
     model = Model(inputs=chars, outputs=tags)
     model.compile(optimizer, categorical_crossentropy)
     return model
@@ -162,11 +163,11 @@ def output_dir(exp_dir='exp'):
     os.mkdir(d)
     return d
 
-def shuffled_batch_generator():
+def shuffled_batch_generator(examples):
     """Yield batches in shuffled order repeatedly."""
     while True:
-        random.shuffle(train_list)
-        yield from grouped_batches(train_list)
+        random.shuffle(examples)
+        yield from grouped_batches(examples)
 
 checkpoint_pattern = output_dir() + '/checkpoint.{epoch:02d}.hdf5'
 checkpoint = ModelCheckpoint(checkpoint_pattern)
@@ -189,7 +190,7 @@ def compute_accuracy(model, name, epoch, result, log, x, y_true):
     result.append(n/d)
 
 def train(model):
-    batches = shuffled_batch_generator()
+    batches = shuffled_batch_generator(train_list)
     num_batches = len(list(grouped_batches(train_list)))
     val_accs = []
     test_accs = []
@@ -203,7 +204,7 @@ def train(model):
 
         with open(output_dir() + '/log.txt', 'a') as log:
             compute_accuracy(model, 'val', k, val_accs, log, *val)
-            compute_accuracy(model, 'test', k, val_accs, log, *test)
+            compute_accuracy(model, 'test', k, test_accs, log, *test)
 
     best_iter = np.argmax(val_accs)
     print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter])
