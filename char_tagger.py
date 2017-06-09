@@ -220,5 +220,6 @@ def evaluate(model, history):
 
     shutil.copyfile('tagger.py', output_dir() + '/tagger.py')
 
-history = train(model)
-evaluate(model, history)
+if __name__ == '__main__':
+    history = train(model)
+    evaluate(model, history)
