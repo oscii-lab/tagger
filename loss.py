@@ -30,7 +30,7 @@ def padded_categorical_accuracy(y_true, y_pred):
     <[2, 1, 0)]>
     >>> padded_categorical_accuracy(true, pred).eval()) # => 0.5
     """
-    padded = tf.squeeze(tf.slice(y_true, [0, 0, 0], [-1, -1, 1]), axis=2)
-    mask = K.equal(padded, 0.)
+    #padded = tf.squeeze(tf.slice(y_true, [0, 0, 0], [-1, -1, 1]), axis=2)
+    mask = K.not_equal(K.argmax(y_true, axis=-1), 0)
     return categorical_accuracy(tf.boolean_mask(y_true, mask),
                                 tf.boolean_mask(y_pred, mask))

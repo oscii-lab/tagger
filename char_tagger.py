@@ -51,9 +51,9 @@ char_size = 50
 word_size = 150
 
 
-def create_model_fn():
+def create_model():
     """Return a function that builds a model for a max sentence length."""
-    # Define all layers so that parameters persist across calls to inner fn
+    # Parameters
     char_embedding = Embedding(input_dim=num_chars,
                                output_dim=char_size,
                                mask_zero=True)
@@ -63,33 +63,20 @@ def create_model_fn():
     tagger = Dense(num_tags, activation='softmax')
     sgd = optimizers.SGD(lr=0.2, momentum=0.95)
 
-    @functools.lru_cache(None)
-    def for_input(sentence_len):
-        """Return a model and output layer for an input representing chars."""
-        chars = Input(shape=(sentence_len, max_word_len), dtype='int32')
-        embedded_chars = TimeDistributed(char_embedding)(chars)
-        embedded_words = TimeDistributed(word_embedding)(embedded_chars)
-        encoded_contexts = encoder(context_embedding(Masking()(embedded_words)))
-        tags = RemoveMask()(tagger(encoded_contexts))
+    # Data flow
+    chars = Input(shape=(None, max_word_len), dtype='int32')
+    embedded_chars = TimeDistributed(char_embedding)(chars)
+    embedded_words = TimeDistributed(word_embedding)(embedded_chars)
+    encoded_contexts = encoder(context_embedding(Masking()(embedded_words)))
+    tags = tagger(encoded_contexts)
 
-        model = Model(inputs=chars, outputs=tags)
-        model.compile(optimizer=sgd,
-                      loss=padded_categorical_crossentropy,
-                      metrics=[padded_categorical_accuracy])
-        return model
+    model = Model(inputs=chars, outputs=tags)
+    model.compile(optimizer=sgd,
+                  loss=categorical_crossentropy,
+                  metrics=[categorical_accuracy])
+    return model
 
-    return for_input
-
-model_for_length = create_model_fn()
-
-
-def model_for_x(x):
-    """Return a model based on a function argument x."""
-    if type(x) == list:
-        return model_for_x(x[0])
-    return model_for_length(x.shape[1])
-
-model = MultiModel(model_for_length(250), model_for_x)
+model = create_model()
 
 # %%
 # Prepare data format for model.
@@ -128,7 +115,7 @@ def prep(tagged_sents, max_len=None):
     x = np.array([prep_chars(t, max_len) for t in tagged_sents])
     tags = tag_map.texts_to_sequences(map(tag_string, tagged_sents))
     padded_tags = sequence.pad_sequences(tags, maxlen=max_len, value=0)
-    y = np.array([np_utils.to_categorical(t, num_tags) for t in padded_tags])
+    y = np.array([np_utils.to_categorical(t, num_tags) for t in padded_tags]).astype(np.float32)
     return x, y
 
 def prep_chars(tagged, max_len):
@@ -187,16 +174,42 @@ def shuffled_batch_generator(batches):
         yield from batches
 
 early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
-                               min_delta=0.0005, patience=0, verbose=1)
-checkpoint = ModelCheckpoint(output_dir() + '/checkpoint.{epoch:02d}.hdf5')
+                               min_delta=0.0005,
+                               patience=3,
+                               verbose=1)
+
+checkpoint_pattern = output_dir() + '/checkpoint.{epoch:02d}.hdf5'
+checkpoint = ModelCheckpoint(checkpoint_pattern)
+
+
+def cat_accuracy(y_true, y_pred):
+    """Categorical accuracy of padded values."""
+    c_true, c_pred = np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1)
+    n = sum(np.logical_and(c_true > 0, c_true == c_pred).reshape((-1,)))
+    d = sum((c_true > 0).reshape((-1,)))
+    return n, d
+
+def compute_accuracy(model, name, result, x, y_true):
+    """Compute and print accuracy."""
+    y_pred = model.predict(x)
+    n, d = cat_accuracy(y_true, y_pred)
+    print('{} accuracy: {}/{} ({}%)'.format(name, n, d, np.round(100*n/d, 5)))
+    result.append(n/d)
 
 def train(model):
-    return model.fit_generator(shuffled_batch_generator(xy_batches),
-                               steps_per_epoch=len(xy_batches),
-                               epochs=30,
-                               verbose=1,
-                               validation_data=val,
-                               callbacks=[early_stopping]).history
+    batches = shuffled_batch_generator(xy_batches)
+    val_accs = []
+    test_accs = []
+    for k in range(1, 20):
+        model.fit_generator(batches,
+                            steps_per_epoch=len(xy_batches),
+                            epochs=k,
+                            initial_epoch=k-1,
+                            validation_data=val,
+                            callbacks=[checkpoint])
+
+        compute_accuracy(model, 'val', val_accs, *val)
+        compute_accuracy(model, 'test', val_accs, *test)
 
 def evaluate(model, history):
     """Evaluate a model on all test sets."""
@@ -221,5 +234,5 @@ def evaluate(model, history):
     shutil.copyfile('tagger.py', output_dir() + '/tagger.py')
 
 if __name__ == '__main__':
-    history = train(model)
-    evaluate(model, history)
+    train(model)
+    # evaluate(model, history)
