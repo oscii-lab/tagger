@@ -186,7 +186,7 @@ def shuffled_batch_generator(batches):
         random.shuffle(batches)
         yield from batches
 
-early_stopping = EarlyStopping(monitor='val_categorical_accuracy',
+early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
                                min_delta=0.0005, patience=0, verbose=1)
 checkpoint = ModelCheckpoint(output_dir() + '/checkpoint.{epoch:02d}.hdf5')
 
