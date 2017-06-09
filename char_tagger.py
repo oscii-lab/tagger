@@ -106,12 +106,10 @@ def tag_string(tagged):
 def char_strings(tagged):
     return [' '.join(shorten_word(w, max_word_len)) for w, t in tagged]
 
-def prep(tagged_sents, max_len=None):
+def prep(tagged_sents):
     """Convert a dataset of tagged sentences into inputs and outputs."""
-    if not max_len:
-        tagged_sents = list(tagged_sents)
-        max_len = max(len(t) for t in tagged_sents)
-    assert all(len(t) <= max_len for t in tagged_sents)
+    tagged_sents = list(tagged_sents)
+    max_len = max(len(t) for t in tagged_sents)
     x = np.array([prep_chars(t, max_len) for t in tagged_sents])
     tags = tag_map.texts_to_sequences(map(tag_string, tagged_sents))
     padded_tags = sequence.pad_sequences(tags, maxlen=max_len, value=0)
@@ -170,30 +168,27 @@ def output_dir(exp_dir='exp'):
 def shuffled_batch_generator(batches):
     """Yield batches in shuffled order repeatedly."""
     while True:
-        random.shuffle(batches)
+        #random.shuffle(batches)
         yield from batches
-
-early_stopping = EarlyStopping(monitor='val_padded_categorical_accuracy',
-                               min_delta=0.0005,
-                               patience=3,
-                               verbose=1)
 
 checkpoint_pattern = output_dir() + '/checkpoint.{epoch:02d}.hdf5'
 checkpoint = ModelCheckpoint(checkpoint_pattern)
 
-
-def cat_accuracy(y_true, y_pred):
+def accuracy_ratio(y_true, y_pred):
     """Categorical accuracy of padded values."""
     c_true, c_pred = np.argmax(y_true, axis=-1), np.argmax(y_pred, axis=-1)
     n = sum(np.logical_and(c_true > 0, c_true == c_pred).reshape((-1,)))
     d = sum((c_true > 0).reshape((-1,)))
     return n, d
 
-def compute_accuracy(model, name, result, x, y_true):
+def compute_accuracy(model, name, epoch, result, log, x, y_true):
     """Compute and print accuracy."""
-    y_pred = model.predict(x)
-    n, d = cat_accuracy(y_true, y_pred)
-    print('{} accuracy: {}/{} ({}%)'.format(name, n, d, np.round(100*n/d, 5)))
+    y_pred = model.predict(x, batch_size=100, verbose=1)
+    n, d = accuracy_ratio(y_true, y_pred)
+    acc = np.round(100*n/d, 5)
+    msg = '{} epoch {} accuracy: {}/{} ({}%)'.format(name, epoch, n, d, acc)
+    print(msg)
+    print(msg, file=log)
     result.append(n/d)
 
 def train(model):
@@ -208,31 +203,14 @@ def train(model):
                             validation_data=val,
                             callbacks=[checkpoint])
 
-        compute_accuracy(model, 'val', val_accs, *val)
-        compute_accuracy(model, 'test', val_accs, *test)
 
-def evaluate(model, history):
-    """Evaluate a model on all test sets."""
-    losses = []
-    accs = []
-    for name, data in zip(['val', 'test'], [val, test]):
-        loss = model.evaluate(*data, verbose=2)
-        losses.append((name, loss))
-        accs.append('{:0.4f}'.format(loss[1]))
-        print('{}: loss: {:0.4f} - acc: {:0.4f}'.format(name, *loss))
-
-    print('\t'.join(accs)) # For easy spreadsheet copy/paste
-
-    with open(output_dir() + '/info.json', 'w') as jout:
-        info = {
-            'history': history,
-            'losses': losses,
-            'sys.argv': sys.argv,
-        }
-        json.dump(info, jout, indent=2)
-
-    shutil.copyfile('tagger.py', output_dir() + '/tagger.py')
+        with open(output_dir() + 'log.txt', 'a') as log:
+            compute_accuracy(model, 'val', k, val_accs, log, *val)
+            compute_accuracy(model, 'test', k, val_accs, log, *test)
+    best_iter = np.argmax(val_accs)
+    print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter])
+    with open(output_dir() + 'log.txt', 'a') as log:
+        print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter], file=log)
 
 if __name__ == '__main__':
     train(model)
-    # evaluate(model, history)
