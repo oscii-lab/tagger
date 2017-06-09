@@ -1,38 +1,23 @@
 """Load a tagger and apply it."""
 
-import itertools
-import functools
-import json
-import os
-import shutil
 import sys
-from datetime import datetime
-
-from argparse import ArgumentParser
-import numpy as np
-np.random.seed(1337)  # for reproducibility
-import tensorflow as tf
-
-from keras.preprocessing import sequence
-from keras.preprocessing.text import Tokenizer
-from keras.models import Model
-from keras.layers import *
-from keras.callbacks import EarlyStopping, ProgbarLogger
-from keras.objectives import categorical_crossentropy
-from keras.metrics import categorical_accuracy
-from keras.utils import np_utils
-from keras import optimizers
-from keras import backend as K
-
-
-from loss import *
-from tags import *
-from subwords import *
-from char_tagger import *
-
-# %%
 
 from keras.models import load_model
+from remove_mask import *
+from loss import *
 
-model = load_model(sys.argv[1])
+custom = {
+    'RemoveMask': RemoveMask,
+    'padded_categorical_crossentropy': padded_categorical_crossentropy,
+    'padded_categorical_accuracy': padded_categorical_accuracy,
+}
+
+print('loading model')
+model = load_model(sys.argv[1], custom_objects=custom)
+
+print('loading data')
+from char_tagger import *
+
+print('evaluating')
+print('Val performance: ', model.evaluate(*val))
 print('Test performance:', model.evaluate(*test))

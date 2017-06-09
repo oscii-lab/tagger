@@ -196,7 +196,7 @@ def train(model):
                                epochs=30,
                                verbose=1,
                                validation_data=val,
-                               callbacks=[checkpoint]).history
+                               callbacks=[early_stopping]).history
 
 def evaluate(model, history):
     """Evaluate a model on all test sets."""
