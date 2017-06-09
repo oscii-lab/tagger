@@ -142,10 +142,10 @@ def grouped_batches(examples):
         contents = groups.setdefault(bin_len, [])
         contents.append(example)
         if (len(contents) + 1) * bin_len > words_per_batch or len(contents) >= 100:
-            yield prep(contents, bin_len)
+            yield prep(contents)
             groups.pop(bin_len)
     for bin_len, contents in groups.items():
-        yield prep(contents, bin_len)
+        yield prep(contents)
 
 def list_tagged(corpus):
     return list(tagged_sents([corpus]))
