@@ -28,8 +28,6 @@ from keras import backend as K
 from loss import *
 from tags import *
 from subwords import *
-from multi_model import *
-from remove_mask import *
 
 #%%
 # Define vocab sizes, including pad value
@@ -203,13 +201,13 @@ def train(model):
                             initial_epoch=k-1,
                             callbacks=[checkpoint])
 
-        with open(output_dir() + 'log.txt', 'a') as log:
+        with open(output_dir() + '/log.txt', 'a') as log:
             compute_accuracy(model, 'val', k, val_accs, log, *val)
             compute_accuracy(model, 'test', k, val_accs, log, *test)
 
     best_iter = np.argmax(val_accs)
     print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter])
-    with open(output_dir() + 'log.txt', 'a') as log:
+    with open(output_dir() + '/log.txt', 'a') as log:
         print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter], file=log)
 
 if __name__ == '__main__':
