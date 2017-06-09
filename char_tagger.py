@@ -50,30 +50,29 @@ lstm_size = 150
 char_size = 50
 word_size = 150
 
+chars = Input(shape=(None, max_word_len), dtype='int32')
 
 def create_model():
-    """Return a function that builds a model for a max sentence length."""
-    # Parameters
+    """Return a model."""
     char_embedding = Embedding(input_dim=num_chars,
                                output_dim=char_size,
                                mask_zero=True)
-    word_embedding = Bidirectional(LSTM(lstm_size))
-    context_embedding = Bidirectional(LSTM(lstm_size, return_sequences=True))
-    encoder = Dense(word_size)
-    tagger = Dense(num_tags, activation='softmax')
-    sgd = optimizers.SGD(lr=0.2, momentum=0.95)
-
-    # Data flow
-    chars = Input(shape=(None, max_word_len), dtype='int32')
     embedded_chars = TimeDistributed(char_embedding)(chars)
-    embedded_words = TimeDistributed(word_embedding)(embedded_chars)
-    encoded_contexts = encoder(context_embedding(Masking()(embedded_words)))
-    tags = tagger(encoded_contexts)
 
+    char_context = Bidirectional(LSTM(lstm_size))
+    word_encoder = Dense(word_size)
+    embedded_words = word_encoder(TimeDistributed(char_context)(embedded_chars))
+
+    word_context = Bidirectional(LSTM(lstm_size, return_sequences=True))
+    context_encoder = Dense(word_size, activation='tanh')
+    embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
+
+    tagger = Dense(num_tags, activation='softmax')
+    tags = tagger(embedded_contexts)
+
+    optimizer = optimizers.SGD(lr=0.2, momentum=0.95)
     model = Model(inputs=chars, outputs=tags)
-    model.compile(optimizer=sgd,
-                  loss=categorical_crossentropy,
-                  metrics=[categorical_accuracy])
+    model.compile(optimizer, categorical_crossentropy)
     return model
 
 model = create_model()
@@ -150,7 +149,7 @@ def grouped_batches(examples):
 def list_tagged(corpus):
     return list(tagged_sents([corpus]))
 
-xy_batches = list(grouped_batches(list_tagged(ptb_train)))
+train_list = list_tagged(ptb_train)
 val = prep(list_tagged(ptb_dev))
 test = prep(list_tagged(ptb_test))
 
@@ -165,11 +164,11 @@ def output_dir(exp_dir='exp'):
     os.mkdir(d)
     return d
 
-def shuffled_batch_generator(batches):
+def shuffled_batch_generator():
     """Yield batches in shuffled order repeatedly."""
     while True:
-        #random.shuffle(batches)
-        yield from batches
+        random.shuffle(train_list)
+        yield from grouped_batches(train_list)
 
 checkpoint_pattern = output_dir() + '/checkpoint.{epoch:02d}.hdf5'
 checkpoint = ModelCheckpoint(checkpoint_pattern)
@@ -192,21 +191,22 @@ def compute_accuracy(model, name, epoch, result, log, x, y_true):
     result.append(n/d)
 
 def train(model):
-    batches = shuffled_batch_generator(xy_batches)
+    batches = shuffled_batch_generator()
+    num_batches = len(list(grouped_batches(train_list)))
     val_accs = []
     test_accs = []
+
     for k in range(1, 20):
         model.fit_generator(batches,
-                            steps_per_epoch=len(xy_batches),
+                            steps_per_epoch=num_batches,
                             epochs=k,
                             initial_epoch=k-1,
-                            validation_data=val,
                             callbacks=[checkpoint])
-
 
         with open(output_dir() + 'log.txt', 'a') as log:
             compute_accuracy(model, 'val', k, val_accs, log, *val)
             compute_accuracy(model, 'test', k, val_accs, log, *test)
+
     best_iter = np.argmax(val_accs)
     print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter])
     with open(output_dir() + 'log.txt', 'a') as log:
