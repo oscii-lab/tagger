@@ -4,6 +4,7 @@ import itertools
 import functools
 import json
 import os
+import random
 import shutil
 import sys
 from datetime import datetime
@@ -17,19 +18,22 @@ from keras.preprocessing import sequence
 from keras.preprocessing.text import Tokenizer
 from keras.models import Model
 from keras.layers import *
-from keras.callbacks import EarlyStopping, ProgbarLogger
+from keras.callbacks import EarlyStopping, ProgbarLogger, ModelCheckpoint
 from keras.objectives import categorical_crossentropy
 from keras.metrics import categorical_accuracy
 from keras.utils import np_utils
 from keras import optimizers
 from keras import backend as K
 
-
 from loss import *
 from tags import *
 from subwords import *
+from multi_model import *
+from remove_mask import *
 
-# Sizes, including mask value
+#%%
+# Define vocab sizes, including pad value
+
 num_words = len(word_map.word_index) + 1
 num_chars = len(char_map.word_index) + 1
 num_tags =  len(tag_map.word_index) + 1
@@ -46,7 +50,8 @@ lstm_size = 150
 char_size = 50
 word_size = 150
 
-def create_model():
+
+def create_model_fn():
     """Return a function that builds a model for a max sentence length."""
     # Define all layers so that parameters persist across calls to inner fn
     char_embedding = Embedding(input_dim=num_chars,
@@ -59,28 +64,32 @@ def create_model():
     sgd = optimizers.SGD(lr=0.2, momentum=0.95)
 
     @functools.lru_cache(None)
-    def for_input(chars):
+    def for_input(sentence_len):
         """Return a model and output layer for an input representing chars."""
+        chars = Input(shape=(sentence_len, max_word_len), dtype='int32')
         embedded_chars = TimeDistributed(char_embedding)(chars)
         embedded_words = TimeDistributed(word_embedding)(embedded_chars)
         encoded_contexts = encoder(context_embedding(Masking()(embedded_words)))
-        tags = tagger(encoded_contexts)
+        tags = RemoveMask()(tagger(encoded_contexts))
 
         model = Model(inputs=chars, outputs=tags)
         model.compile(optimizer=sgd,
-                      loss=categorical_crossentropy,
-                      metrics=[categorical_accuracy])
-        return model, tags
+                      loss=padded_categorical_crossentropy,
+                      metrics=[padded_categorical_accuracy])
+        return model
 
     return for_input
 
-@functools.lru_cache(None)
-def input_for_len(sentence_len):
-    return Input(shape=(sentence_len, max_word_len), dtype='int32')
+model_for_length = create_model_fn()
 
-def model_for_length(sentence_len, model_for_input=create_model()):
-    """Return a model for a maximum sentence length."""
-    return model_for_input(input_for_len(sentence_len))
+
+def model_for_x(x):
+    """Return a model based on a function argument x."""
+    if type(x) == list:
+        return model_for_x(x[0])
+    return model_for_length(x.shape[1])
+
+model = MultiModel(model_for_length(250), model_for_x)
 
 # %%
 # Prepare data format for model.
@@ -120,7 +129,7 @@ def prep(tagged_sents, max_len=None):
     tags = tag_map.texts_to_sequences(map(tag_string, tagged_sents))
     padded_tags = sequence.pad_sequences(tags, maxlen=max_len, value=0)
     y = np.array([np_utils.to_categorical(t, num_tags) for t in padded_tags])
-    return x[:100], y[:100]
+    return x, y
 
 def prep_chars(tagged, max_len):
     """Convert sentence into a padded array of character embeddings."""
@@ -139,39 +148,58 @@ def next_largest(length):
 def choose_bin(tagged):
     return next_largest(len(tagged))
 
-def grouped_batches(examples, prep, choose_bin):
+def grouped_batches(examples):
     """Generate batches grouped by length."""
+    # TODO fn could be paramaterized by choose_bin, prep, and the yield condition.
     groups = {}
     for example in examples:
         bin_len = choose_bin(example)
-        bin_contents = groups.setdefault(bin_len, [])
-        bin_contents.append(example)
-        if (len(bin_contents) + 1) * bin_len > words_per_batch:
-            yield prep(bin_contents, bin_len)
+        contents = groups.setdefault(bin_len, [])
+        contents.append(example)
+        if (len(contents) + 1) * bin_len > words_per_batch or len(contents) >= 100:
+            yield prep(contents, bin_len)
             groups.pop(bin_len)
-    for bin_len, bin_contents in groups.items():
-        yield prep(bin_contents, bin_len)
+    for bin_len, contents in groups.items():
+        yield prep(contents, bin_len)
 
-xy_batches = list(grouped_batches(tagged_sents([ptb_train]), prep, choose_bin))
-val = prep(tagged_sents([ptb_dev]))
-test = prep(tagged_sents([ptb_test]))
+def list_tagged(corpus):
+    return list(tagged_sents([corpus]))
+
+xy_batches = list(grouped_batches(list_tagged(ptb_train)))
+val = prep(list_tagged(ptb_dev))
+test = prep(list_tagged(ptb_test))
 
 # %%
 # Train and evaluate.
 
+@functools.lru_cache(None)
+def output_dir(exp_dir='exp'):
+    d = datetime.today().strftime(exp_dir + '/%y%m%d_%H%M%S')
+    if not os.path.exists(exp_dir):
+        os.mkdir(exp_dir)
+    os.mkdir(d)
+    return d
+
+def shuffled_batch_generator(batches):
+    """Yield batches in shuffled order repeatedly."""
+    while True:
+        random.shuffle(batches)
+        yield from batches
+
 early_stopping = EarlyStopping(monitor='val_categorical_accuracy',
                                min_delta=0.0005, patience=0, verbose=1)
+checkpoint = ModelCheckpoint(output_dir() + '/checkpoint.{epoch:02d}.hdf5')
+
 def train(model):
-    return model.fit_generator(itertools.cycle(xy_batches),
+    return model.fit_generator(shuffled_batch_generator(xy_batches),
                                steps_per_epoch=len(xy_batches),
-                               epochs=5,
+                               epochs=30,
                                verbose=1,
                                validation_data=val,
-                               callbacks=[early_stopping]).history
+                               callbacks=[checkpoint]).history
 
-def evaluate(label, model, history, exp_dir='exp'):
-    """Evaluate a labeled model on all test sets and save it."""
-    print('Evaluating', label)
+def evaluate(model, history):
+    """Evaluate a model on all test sets."""
     losses = []
     accs = []
     for name, data in zip(['val', 'test'], [val, test]):
@@ -182,79 +210,15 @@ def evaluate(label, model, history, exp_dir='exp'):
 
     print('\t'.join(accs)) # For easy spreadsheet copy/paste
 
-    output_dir = datetime.today().strftime(exp_dir + '/%y%m%d_%H%M%S')
-    if not os.path.exists(exp_dir):
-        os.mkdir(exp_dir)
-    os.mkdir(output_dir)
-
-    try:
-        with open(output_dir + '/model.json', 'w') as jout:
-            jout.write(model.to_json())
-        model.save(output_dir + '/model.h5')
-    except:
-        pass
-
-    with open(output_dir + '/info.json', 'w') as jout:
+    with open(output_dir() + '/info.json', 'w') as jout:
         info = {
             'history': history,
             'losses': losses,
             'sys.argv': sys.argv,
-            'label': label,
         }
         json.dump(info, jout, indent=2)
 
-    shutil.copyfile('tagger.py', output_dir + '/tagger.py')
+    shutil.copyfile('tagger.py', output_dir() + '/tagger.py')
 
-class MultiModel(Model):
-    """A wrapper that chooses a model based on method input x.
-
-    example_model -- The model to use when the input is unknown.
-    choose_model  -- A fn from x (an input tensor) to a model.
-    """
-    def __init__(self, example_model, choose_model):
-        self.example_model = example_model
-        self.choose_model = choose_model
-
-        # If an attribute is not found on the example, look in this object
-        example_model.__getattr__ = self.__getattribute__
-
-    def __getattribute__(self, name):
-        """Return instance attribute, or x-specific attr, or example attr."""
-        if name == '__dict__' or name in self.__dict__.keys():
-            return object.__getattribute__(self, name)
-
-        a = self.example_model.__getattribute__(name)
-        if hasattr(a, '__func__'): # It's a method!
-            varnames = a.__func__.__code__.co_varnames
-            if 'x' in varnames:
-                x_pos = varnames.index('x')
-
-                @functools.wraps(a)
-                def late_binding_method(*args, **vargs):
-                    x = vargs['x'] if 'x' in vargs else args[x_pos]
-
-                    try:
-                        x_specific = self.choose_model(x)
-                    except:
-                        print("Cannot choose a model from", x, "for", name)
-                        x_specific = self.example_model
-
-                    # If an attribute is not found, look in this object
-                    x_specific.__getattr__ = self.__getattribute__
-
-                    return x_specific.__getattribute__(name)(*args, **vargs)
-
-                return late_binding_method
-            else:
-                return object.__getattribute__(self, name)
-        return a
-
-def model_for_x(x):
-    """Return a model based on a function argument x."""
-    if type(x) == list:
-        return model_for_x(x[0])
-    return model_for_length(x.shape[1])[0]
-
-model = MultiModel(model_for_length(250)[0], model_for_x)
-
-train(model)
+history = train(model)
+evaluate(model, history)
