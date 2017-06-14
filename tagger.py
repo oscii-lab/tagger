@@ -120,7 +120,7 @@ def make(dropout=0, k=1, tag_twice=False):
     # Build a convolutional network
     encoded_words = embedded_words
     for i in range(3):
-        encoded_words = Transformer(150, residual=i>0)(encoded_words)
+        encoded_words = Transformer(1024, residual=i>0)(encoded_words)
         encoded_words = BatchNormalization()(encoded_words)
 
     # bi_encoded_words = encoder(embedded_words)
@@ -178,9 +178,9 @@ def create_positional_embeddings(s,embed_dim):
         new_arr = np.zeros(n_dims)
         for i in range(n_dims):
             if i % 2 == 0:
-                new_arr[i] = np.sin((pos/10000)**(2*i/n_dims))
+                new_arr[i] = np.sin(pos/(10000**(i/n_dims)))
             else:
-                new_arr[i] = np.cos((pos/10000)**(2*i/n_dims))
+                new_arr[i] = np.cos(pos/(10000**((i-1)/n_dims))
         return new_arr
     max_pos = s[1]
     pos_arrs = []
