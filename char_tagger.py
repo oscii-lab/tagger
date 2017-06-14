@@ -48,9 +48,9 @@ print('Tag set size: ', num_tags-1)
 max_word_len = 20
 lstm_size = 150
 char_size = 50
-word_size = 512
+word_size = 128
 model_type = ['lstm', 'transformer'][1]
-layers = 4
+num_layers = 3
 
 chars = Input(shape=(None, max_word_len), dtype='int32')
 
@@ -71,7 +71,7 @@ def create_model():
         embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
     elif model_type == 'transformer':
         embedded_contexts = AddPositionEncodings(embedded_words)
-        for i in range(layers):
+        for i in range(num_layers):
             embedded_contexts = Transformer(word_size, residual=True)(embedded_contexts)
             embedded_contexts = BatchNormalization()(embedded_contexts)
 
@@ -198,6 +198,7 @@ def compute_accuracy(model, name, epoch, result, log, x, y_true):
     print(msg)
     print(msg, file=log)
     result.append(n/d)
+    return n/d
 
 def train(model):
     batches = shuffled_batch_generator(train_list)
@@ -212,9 +213,11 @@ def train(model):
                             initial_epoch=k-1,
                             callbacks=[])
 
-        with open(output_dir() + '/log.txt', 'a') as log:
-            compute_accuracy(model, 'val', k, val_accs, log, *val)
-            compute_accuracy(model, 'test', k, test_accs, log, *test)
+        if k > 4:
+            with open(output_dir() + '/log.txt', 'a') as log:
+                acc = compute_accuracy(model, 'val', k, val_accs, log, *val)
+                if acc > .96:
+                    compute_accuracy(model, 'test', k, test_accs, log, *test)
 
     best_iter = np.argmax(val_accs)
     print('Best val:', val_accs[best_iter], 'test:', test_accs[best_iter])
