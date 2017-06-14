@@ -1,55 +1,64 @@
 '''A transformer layer.'''
 
 from keras import backend as K
-from keras.engine.topology import Layer
+from keras.engine import Layer, InputSpec
+from keras.layers.core import Dense
 import numpy as np
 
-class Transformer(Layer):
-    def __init__(self, qkv_dim=64, heads=8, output_dim=1024, **kwargs):
+class Transformer(Dense):
+    '''Transformer layer.
+
+    Description: https://arxiv.org/abs/1706.03762
+
+    Implemented as a sub-class of Dense for initializer args, etc. The base
+    class weights apply the final linear projection in the transformer.
+    '''
+    def __init__(self, units, qkv_dim=64, heads=8, **kwargs):
         self.qkv_dim = qkv_dim
         self.heads = heads
-        self.output_dim = output_dim
-        super().__init__(**kwargs)
+        kwargs['use_bias'] = True
+        super().__init__(units, **kwargs)
+
+    @staticmethod
+    def _expand_qkv(value_or_list):
+        '''Expand one or more arguments into a three-element list.'''
+        if isinstance(value_or_list, list):
+            if len(value_or_list) == 3:    # query, key, value
+                return value_or_list
+            elif len(value_or_list) == 2:  # query, key_and_value
+                return [value_or_list[0], value_or_list[1], value_or_list[1]]
+            elif len(value_or_list) == 1:
+                return [value_or_list[0]] * 3
+        else:
+            return [value_or_list] * 3
+
+    def _add(self, name, shape):
+        '''Add a weight.'''
+        return self.add_weight(name=name,
+                               shape=shape,
+                               initializer=self.kernel_initializer,
+                               regularizer=self.kernel_regularizer,
+                               constraint=self.kernel_constraint)
 
     def build(self, input_shape):
-        if isinstance(input_shape, list):
-            if len(input_shape) == 3:
-                qdim, kdim, vdim = [s[-1] for s in input_shape]
-            elif len(input_shape) == 2:
-                qdim, kdim, vdim = [s[-1] for s in [input_shape[0], input_shape[1], input_shape[1]]]
-            elif len(input_shape) == 1:
-                qdim, kdim, vdim = [s[-1] for s in [input_shape[0]] * 3]
-        else:
-            qdim, kdim, vdim = [input_shape[-1]] * 3
-
-        def add(n, s):
-            return self.add_weight(name=n, shape=s, initializer='uniform', trainable=True)
-
+        shapes = self._expand_qkv(input_shape)
+        qdim, kdim, vdim = [s[-1] for s in shapes]
         self.projections = []
         for i in range(self.heads):
             self.projections.append([
-                add('qp_%d' % i, (qdim, self.qkv_dim)),
-                add('kp_%d' % i, (kdim, self.qkv_dim)),
-                add('vp_%d' % i, (vdim, self.qkv_dim))
+                self._add('qp_%d' % i, (qdim, self.qkv_dim)),
+                self._add('kp_%d' % i, (kdim, self.qkv_dim)),
+                self._add('vp_%d' % i, (vdim, self.qkv_dim))
             ])
+
         encoding_dim = self.qkv_dim * self.heads
-        self.inner_ffa = add('inner_ffa_%d' % i, (encoding_dim, self.output_dim))
-        self.inner_ffb = add('inner_ffb_%d' % i, (self.output_dim,))
-        self.outer_ffa = add('outer_ffa_%d' % i, (self.output_dim, self.output_dim))
-        self.outer_ffb = add('outer_ffb_%d' % i, (self.output_dim,))
-        super().build(input_shape)
+        self.relu_kernel = self._add('relu_kernel', (encoding_dim, self.units))
+        self.relu_bias = self._add('relu_bias', (self.units,))
+        super().build(list(shapes[0])[:-1] + [self.units]) # Dense after relu
+        self.input_spec = InputSpec(min_ndim=2) # Remove input shape check
 
     def call(self, x):
-        if isinstance(x, list):
-            if len(x) == 3:
-                q, k, v = x
-            elif len(x) == 2:
-                q, k, v = x[0], x[1], x[1]
-            else:
-                q, k, v = x[0], x[0], x[0]
-        else:
-            q, k, v = x, x, x
-
+        q, k, v = self._expand_qkv(x)
         encodings = []
         for qp, kp, vp in self.projections:
             queries = K.dot(q, qp)
@@ -60,17 +69,17 @@ class Transformer(Layer):
             weighted_values = K.batch_dot(distributions, values)
             encodings.append(weighted_values)
         encoding = K.concatenate(encodings)
-        # import pdb; pdb.set_trace()
-        linear = K.dot(encoding, self.inner_ffa)
-        K.bias_add(linear, self.inner_ffb)
-        relu = K.maximum(0., linear)
-        output = K.dot(relu, self.outer_ffa)
-        K.bias_add(output, self.outer_ffb)
+
+        linear = K.dot(encoding, self.relu_kernel)
+        linear = K.bias_add(linear, self.relu_bias)
+        relu = K.relu(linear)
+        output = super().call(relu) # Applies dense layer
         return output
 
-    def compute_output_shape(self, input_shape):
-        assert input_shape and len(input_shape) >= 2
-        assert input_shape[-1]
-        output_shape = list(input_shape)
-        output_shape[-1] = self.output_dim
-        return tuple(output_shape)
+    def get_config(self):
+        config = {
+            'qkv_dim': self.qkv_dim,
+            'heads': self.heads
+        }
+        base_config = super().get_config()
+        return dict(list(base_config.items()) + list(config.items()))

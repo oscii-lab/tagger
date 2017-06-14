@@ -48,6 +48,7 @@ max_word_len = 20
 lstm_size = 150
 char_size = 50
 word_size = 150
+model_type = ['lstm', 'transformer'][1]
 
 chars = Input(shape=(None, max_word_len), dtype='int32')
 
@@ -62,12 +63,14 @@ def create_model():
     word_encoder = Dense(word_size)
     embedded_words = word_encoder(TimeDistributed(char_context)(embedded_chars))
 
-    #word_context = Bidirectional(LSTM(lstm_size, return_sequences=True))
-    #context_encoder = Dense(word_size, activation='tanh')
-    #embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
-    embedded_contexts = embedded_words
-    for _ in range(6):
-        embedded_contexts = Transformer()(embedded_contexts)
+    if model_type == 'lstm':
+        word_context = Bidirectional(LSTM(lstm_size, return_sequences=True))
+        context_encoder = Dense(word_size, activation='tanh')
+        embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
+    elif model_type == 'transformer':
+        embedded_contexts = embedded_words
+        for _ in range(6):
+            embedded_contexts = Transformer(1024)(embedded_contexts)
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
