@@ -19,9 +19,9 @@ def add_position_encodings(x, mask_value=0.):
     pos = K.cumsum(K.ones_like(x), axis=1)[:, :, :half]
 
     # A range over dimensions, copied once per position
-    i = K.cumsum(K.ones_like(x), axis=2)[:, :, :half] * 2
+    i = (K.cumsum(K.ones_like(x), axis=2)[:, :, :half] - 1) * 2
 
-    trig_arg = pos * (1 / (10000 ** (i/dimensions)))
+    trig_arg = pos * (1 / (10000 ** (i / dimensions)))
     encoding = K.concatenate((K.sin(trig_arg), K.cos(trig_arg)), axis=-1)
 
     boolean_mask = K.any(K.not_equal(x, mask_value), axis=-1, keepdims=True)
