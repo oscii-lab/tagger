@@ -180,7 +180,7 @@ def create_positional_embeddings(s,embed_dim):
             if i % 2 == 0:
                 new_arr[i] = np.sin(pos/(10000**(i/n_dims)))
             else:
-                new_arr[i] = np.cos(pos/(10000**((i-1)/n_dims))
+                new_arr[i] = np.cos(pos/(10000**((i-1)/n_dims)))
         return new_arr
     max_pos = s[1]
     pos_arrs = []
