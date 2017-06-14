@@ -12,13 +12,13 @@ def add_position_encodings(x, mask_value=0.):
     In the paper, sin and cos are interleaved, but here they are concatenated.
     '''
     dimensions = x.get_shape().as_list()[-1]
-    half = dimensions // 2
     assert dimensions is not None, 'Last dimension must not be None'
+    half = dimensions // 2
 
     # One constant vector per position
     pos = K.cumsum(K.ones_like(x), axis=1)[:, :, :half]
 
-    # A range over dimensions, copied once per position
+    # A range over dimensions, repeated once per position
     i = (K.cumsum(K.ones_like(x), axis=2)[:, :, :half] - 1) * 2
 
     trig_arg = pos * (1 / (10000 ** (i / dimensions)))
