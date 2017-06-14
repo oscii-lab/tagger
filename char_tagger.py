@@ -47,8 +47,9 @@ print('Tag set size: ', num_tags-1)
 max_word_len = 20
 lstm_size = 150
 char_size = 50
-word_size = 150
+word_size = 512
 model_type = ['lstm', 'transformer'][1]
+layers = 4
 
 chars = Input(shape=(None, max_word_len), dtype='int32')
 
@@ -69,9 +70,9 @@ def create_model():
         embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
     elif model_type == 'transformer':
         embedded_contexts = embedded_words
-        for i in range(6):
-            embedded_contexts = Transformer(1024, residual=i>0)(embedded_contexts)
-            embedded_contexts = BatchNormalization()(embedded_contexts)
+        for i in range(layers):
+            embedded_contexts = Transformer(word_size, residual=True)(embedded_contexts)
+            # embedded_contexts = BatchNormalization()(embedded_contexts)
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
