@@ -26,8 +26,9 @@ from keras import optimizers
 from keras import backend as K
 
 from loss import *
-from tags import *
+from position import *
 from subwords import *
+from tags import *
 from transformer import *
 
 #%%
@@ -69,10 +70,10 @@ def create_model():
         context_encoder = Dense(word_size, activation='tanh')
         embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
     elif model_type == 'transformer':
-        embedded_contexts = embedded_words
+        embedded_contexts = AddPositionEncodings(embedded_words)
         for i in range(layers):
             embedded_contexts = Transformer(word_size, residual=True)(embedded_contexts)
-            # embedded_contexts = BatchNormalization()(embedded_contexts)
+            embedded_contexts = BatchNormalization()(embedded_contexts)
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
