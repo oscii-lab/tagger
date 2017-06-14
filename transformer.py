@@ -13,9 +13,10 @@ class Transformer(Dense):
     Implemented as a sub-class of Dense for initializer args, etc. The base
     class weights apply the final linear projection in the transformer.
     '''
-    def __init__(self, units, qkv_dim=64, heads=8, residual=False, **kwargs):
-        self.qkv_dim = qkv_dim
+    def __init__(self, units, heads=8, residual=False, **kwargs):
+        assert units % heads == 0, 'Number of heads must evenly divide units'
         self.heads = heads
+        self.projected_dim = units // heads
         self.residual = residual
         kwargs['use_bias'] = True
         super().__init__(units, **kwargs)
@@ -47,13 +48,12 @@ class Transformer(Dense):
         self.projections = []
         for i in range(self.heads):
             self.projections.append([
-                self._add('qp_%d' % i, (qdim, self.qkv_dim)),
-                self._add('kp_%d' % i, (kdim, self.qkv_dim)),
-                self._add('vp_%d' % i, (vdim, self.qkv_dim)),
+                self._add('qp_%d' % i, (qdim, self.projected_dim)),
+                self._add('kp_%d' % i, (kdim, self.projected_dim)),
+                self._add('vp_%d' % i, (vdim, self.projected_dim)),
             ])
 
-        encoding_dim = self.qkv_dim * self.heads
-        self.relu_kernel = self._add('relu_kernel', (encoding_dim, self.units))
+        self.relu_kernel = self._add('relu_kernel', (self.units, self.units))
         self.relu_bias = self._add('relu_bias', (self.units,))
         super().build(list(shapes[0])[:-1] + [self.units]) # Dense after relu
         if self.residual:
@@ -70,22 +70,26 @@ class Transformer(Dense):
             keys = K.dot(k, kp)
             values = K.dot(v, vp)
             logits = K.batch_dot(queries, K.permute_dimensions(keys, [0, 2, 1]))
-            distributions = K.softmax(logits / K.constant(np.sqrt(self.qkv_dim)))
+            distributions = K.softmax(logits / K.constant(np.sqrt(self.projected_dim)))
             weighted_values = K.batch_dot(distributions, values)
             encodings.append(weighted_values)
         encoding = K.concatenate(encodings)
+        if self.residual:
+            encoding = x + encoding
+        # TODO Layer normalization
 
         linear = K.dot(encoding, self.relu_kernel)
         linear = K.bias_add(linear, self.relu_bias)
         relu = K.relu(linear)
         output = super().call(relu) # Applies dense layer
         if self.residual:
-            output = x + output
+            output = encoding + output
+        # TODO Layer normalization
+
         return output
 
     def get_config(self):
         config = {
-            'qkv_dim': self.qkv_dim,
             'heads': self.heads,
             'residual': self.residual,
         }
