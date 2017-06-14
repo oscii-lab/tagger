@@ -13,9 +13,10 @@ class Transformer(Dense):
     Implemented as a sub-class of Dense for initializer args, etc. The base
     class weights apply the final linear projection in the transformer.
     '''
-    def __init__(self, units, qkv_dim=64, heads=8, **kwargs):
+    def __init__(self, units, qkv_dim=64, heads=8, residual=False, **kwargs):
         self.qkv_dim = qkv_dim
         self.heads = heads
+        self.residual = residual
         kwargs['use_bias'] = True
         super().__init__(units, **kwargs)
 
@@ -48,14 +49,18 @@ class Transformer(Dense):
             self.projections.append([
                 self._add('qp_%d' % i, (qdim, self.qkv_dim)),
                 self._add('kp_%d' % i, (kdim, self.qkv_dim)),
-                self._add('vp_%d' % i, (vdim, self.qkv_dim))
+                self._add('vp_%d' % i, (vdim, self.qkv_dim)),
             ])
 
         encoding_dim = self.qkv_dim * self.heads
         self.relu_kernel = self._add('relu_kernel', (encoding_dim, self.units))
         self.relu_bias = self._add('relu_bias', (self.units,))
         super().build(list(shapes[0])[:-1] + [self.units]) # Dense after relu
-        self.input_spec = InputSpec(min_ndim=2) # Remove input shape check
+        if self.residual:
+            # Ensure that input and output shapes match
+            self.input_spec = InputSpec(min_ndim=2, axes={-1: self.units})
+        else:
+            self.input_spec = InputSpec(min_ndim=2)
 
     def call(self, x):
         q, k, v = self._expand_qkv(x)
@@ -74,12 +79,15 @@ class Transformer(Dense):
         linear = K.bias_add(linear, self.relu_bias)
         relu = K.relu(linear)
         output = super().call(relu) # Applies dense layer
+        if self.residual:
+            output = x + output
         return output
 
     def get_config(self):
         config = {
             'qkv_dim': self.qkv_dim,
-            'heads': self.heads
+            'heads': self.heads,
+            'residual': self.residual,
         }
         base_config = super().get_config()
         return dict(list(base_config.items()) + list(config.items()))

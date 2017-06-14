@@ -69,8 +69,9 @@ def create_model():
         embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
     elif model_type == 'transformer':
         embedded_contexts = embedded_words
-        for _ in range(6):
-            embedded_contexts = Transformer(1024)(embedded_contexts)
+        for i in range(6):
+            embedded_contexts = Transformer(1024, residual=i>0)(embedded_contexts)
+            embedded_contexts = BatchNormalization()(embedded_contexts)
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
