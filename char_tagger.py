@@ -28,6 +28,7 @@ from keras import backend as K
 from loss import *
 from tags import *
 from subwords import *
+from transformer import *
 
 #%%
 # Define vocab sizes, including pad value
@@ -61,9 +62,12 @@ def create_model():
     word_encoder = Dense(word_size)
     embedded_words = word_encoder(TimeDistributed(char_context)(embedded_chars))
 
-    word_context = Bidirectional(LSTM(lstm_size, return_sequences=True))
-    context_encoder = Dense(word_size, activation='tanh')
-    embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
+    #word_context = Bidirectional(LSTM(lstm_size, return_sequences=True))
+    #context_encoder = Dense(word_size, activation='tanh')
+    #embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
+    embedded_contexts = embedded_words
+    for _ in range(6):
+        embedded_contexts = Transformer()(embedded_contexts)
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
@@ -200,7 +204,7 @@ def train(model):
                             steps_per_epoch=num_batches,
                             epochs=k,
                             initial_epoch=k-1,
-                            callbacks=[checkpoint])
+                            callbacks=[])
 
         with open(output_dir() + '/log.txt', 'a') as log:
             compute_accuracy(model, 'val', k, val_accs, log, *val)
