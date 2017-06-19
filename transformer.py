@@ -81,12 +81,12 @@ class Transformer(Dense):
             keys = K.dot(k, kp)
             values = K.dot(v, vp)
             logits = K.batch_dot(queries, K.permute_dimensions(keys, [0, 2, 1]))
-            distributions = Dropout(.1)(K.softmax(logits / K.constant(np.sqrt(self.projected_dim))))
+            distributions = Dropout(0)(K.softmax(logits / K.constant(np.sqrt(self.projected_dim))))
             weighted_values = K.batch_dot(distributions, values)
             encodings.append(weighted_values)
         encoding = K.concatenate(encodings)
         if self.residual:
-            encoding = x + Dropout(.1)(encoding)
+            encoding = x + Dropout(0)(encoding)
         # TODO Layer normalization
 
         linear = K.dot(encoding, self.relu_kernel)
