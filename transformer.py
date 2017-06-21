@@ -13,11 +13,19 @@ class Transformer(Dense):
     Implemented as a sub-class of Dense for initializer args, etc. The base
     class weights apply the final linear projection in the transformer.
     '''
-    def __init__(self, units, heads=8, residual=False, **kwargs):
+    def __init__(self, units, hidden_units=None, heads=8, residual=True, mask_value=0, **kwargs):
+        assert units, 'Units must be positive'
         assert units % heads == 0, 'Number of heads must evenly divide units'
+
+        if hidden_units is None:
+            self.hidden_units = units
+        else:
+            self.hidden_units = hidden_units
+
         self.heads = heads
         self.projected_dim = units // heads
         self.residual = residual
+        self.mask_value = mask_value
         kwargs['use_bias'] = True
         super().__init__(units, **kwargs)
 
@@ -53,9 +61,9 @@ class Transformer(Dense):
                 self._add('vp_%d' % i, (vdim, self.projected_dim)),
             ])
 
-        self.relu_kernel = self._add('relu_kernel', (self.units, self.units))
-        self.relu_bias = self._add('relu_bias', (self.units,))
-        super().build(list(shapes[0])[:-1] + [self.units]) # Dense after relu
+        self.relu_kernel = self._add('relu_kernel', (self.units, self.hidden_units))
+        self.relu_bias = self._add('relu_bias', (self.hidden_units,))
+        super().build(list(shapes[0])[:-1] + [self.hidden_units]) # Dense after relu
         if self.residual:
             # Ensure that input and output shapes match
             self.input_spec = InputSpec(min_ndim=2, axes={-1: self.units})
@@ -70,7 +78,14 @@ class Transformer(Dense):
             keys = K.dot(k, kp)
             values = K.dot(v, vp)
             logits = K.batch_dot(queries, K.permute_dimensions(keys, [0, 2, 1]))
-            distributions = K.softmax(logits / K.constant(np.sqrt(self.projected_dim)))
+            distributions = K.softmax(logits / np.sqrt(self.projected_dim))
+
+            # Make it impossible to attend to masked values.
+            key_mask = K.any(K.not_equal(k, self.mask_value), axis=-1, keepdims=True)
+            distributions *= K.cast(key_mask, K.floatx())
+            distributions /= K.sum(distributions)
+
+            # TODO dropout distributions
             weighted_values = K.batch_dot(distributions, values)
             encodings.append(weighted_values)
         encoding = K.concatenate(encodings)
@@ -82,6 +97,7 @@ class Transformer(Dense):
         linear = K.bias_add(linear, self.relu_bias)
         relu = K.relu(linear)
         output = super().call(relu) # Applies dense layer
+        # TODO dropout output
         if self.residual:
             output = encoding + output
         # TODO Layer normalization
