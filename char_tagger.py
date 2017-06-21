@@ -46,13 +46,27 @@ print('Tag set size: ', num_tags-1)
 # Build models.
 
 max_word_len = 20
-lstm_size = 150
+lstm_size = 50
 char_size = 50
 word_size = 128
 model_type = ['lstm', 'transformer'][1]
+char_encoder = ['lstm', 'conv'][1]
+
 num_layers = 3
 
 chars = Input(shape=(None, max_word_len), dtype='int32')
+
+#
+# def LayerNormalize(inputs):
+#     g = Dense(word_size)(K.constant(0,shape=(word_size,)))
+#     b = Dense(word_size)(K.constant(0,shape=(word_size,)))
+#     mean = tf.reduce_mean(inputs, -1, keep_dims=True)
+#
+#     deviation = inputs - mean
+#     x = tf.square(deviation)
+#     stdDev = tf.sqrt(tf.reduce_mean(x, axis = 2, keep_dims=True))
+#
+#     return (g / stdDev) * deviation + b
 
 def create_model():
     """Return a model."""
@@ -62,18 +76,31 @@ def create_model():
     embedded_chars = TimeDistributed(char_embedding)(chars)
 
     char_context = Bidirectional(LSTM(lstm_size))
+
     word_encoder = Dense(word_size)
-    embedded_words = word_encoder(TimeDistributed(char_context)(embedded_chars))
+    if char_encoder == 'conv':
+        char_context_conv = Convolution1D(lstm_size*2,kernel_size=4)
+        embed_conv_words = TimeDistributed(char_context_conv)(embedded_chars)
+        embed_conv_words = Activation('relu')(embed_conv_words)
+        embedded_words = Lambda(lambda x: K.sum(x,axis = -2))(embed_conv_words)
+        embedded_words = word_encoder(embedded_words)
+    else:
+
+        char_context = Bidirectional(LSTM(lstm_size))
+        word_encoder = Dense(word_size)
+        embedded_words = word_encoder(TimeDistributed(char_context)(embedded_chars))
+
 
     if model_type == 'lstm':
         word_context = Bidirectional(LSTM(lstm_size, return_sequences=True))
         context_encoder = Dense(word_size, activation='tanh')
         embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
     elif model_type == 'transformer':
-        embedded_contexts = AddPositionEncodings(embedded_words)
+        embedded_contexts = Dropout(.1)(AddPositionEncodings(embedded_words))
         for i in range(num_layers):
             embedded_contexts = Transformer(word_size, residual=True)(embedded_contexts)
-            embedded_contexts = BatchNormalization()(embedded_contexts)
+    # embedded_words_and_position = Dropout(.1)(AddPositionEncodings(embedded_words))
+    embedded_contexts = merge([embedded_contexts,embedded_words], mode='sum')
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
@@ -159,6 +186,8 @@ def list_tagged(corpus):
     return list(tagged_sents([corpus]))
 
 train_list = list_tagged(ptb_train)
+train_plain = prep(list_tagged(ptb_train))
+
 val = prep(list_tagged(ptb_dev))
 test = prep(list_tagged(ptb_test))
 
@@ -212,7 +241,8 @@ def train(model):
                             epochs=k,
                             initial_epoch=k-1,
                             callbacks=[])
-
+        with open(output_dir() + '/log.txt', 'a') as log:
+            acc = compute_accuracy(model, 'train', k, val_accs, log, train_plain[0][:1000],train_plain[1][:1000])
         if k > 4:
             with open(output_dir() + '/log.txt', 'a') as log:
                 acc = compute_accuracy(model, 'val', k, val_accs, log, *val)

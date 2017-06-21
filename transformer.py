@@ -2,8 +2,12 @@
 
 from keras import backend as K
 from keras.engine import Layer, InputSpec
-from keras.layers.core import Dense
+from keras.layers.core import Dense, Dropout
 import numpy as np
+import tensorflow as tf
+
+
+
 
 class Transformer(Dense):
     '''Transformer layer.
@@ -13,7 +17,7 @@ class Transformer(Dense):
     Implemented as a sub-class of Dense for initializer args, etc. The base
     class weights apply the final linear projection in the transformer.
     '''
-    def __init__(self, units, hidden_units=None, heads=8, residual=True, mask_value=0, **kwargs):
+    def __init__(self, units, hidden_units=None, heads=8, residual=True, mask_value=0, dropout=0, **kwargs):
         assert units, 'Units must be positive'
         assert units % heads == 0, 'Number of heads must evenly divide units'
 
@@ -26,6 +30,7 @@ class Transformer(Dense):
         self.projected_dim = units // heads
         self.residual = residual
         self.mask_value = mask_value
+        self.dropout = dropout
         kwargs['use_bias'] = True
         super().__init__(units, **kwargs)
 
@@ -49,6 +54,12 @@ class Transformer(Dense):
                                initializer=self.kernel_initializer,
                                regularizer=self.kernel_regularizer,
                                constraint=self.kernel_constraint)
+    def _normalize(self, inputs):
+       mean = tf.reduce_mean(inputs, -1, keep_dims=True)
+       deviation = inputs - mean
+       x = tf.square(deviation)
+       stdDev = tf.sqrt(tf.reduce_mean(x, axis=2, keep_dims=True))
+       return (self.g / stdDev) * deviation + self.b
 
     def build(self, input_shape):
         shapes = self._expand_qkv(input_shape)
@@ -61,9 +72,12 @@ class Transformer(Dense):
                 self._add('vp_%d' % i, (vdim, self.projected_dim)),
             ])
 
+        self.g = self._add('g', (self.units,))
+        self.b = self._add('b', (self.units,))
         self.relu_kernel = self._add('relu_kernel', (self.units, self.hidden_units))
         self.relu_bias = self._add('relu_bias', (self.hidden_units,))
-        super().build(list(shapes[0])[:-1] + [self.hidden_units]) # Dense after relu
+        super().build(list(shapes[0])[:-1] + [self.units]) # Dense after relu
+
         if self.residual:
             # Ensure that input and output shapes match
             self.input_spec = InputSpec(min_ndim=2, axes={-1: self.units})
@@ -85,22 +99,21 @@ class Transformer(Dense):
             distributions *= K.cast(key_mask, K.floatx())
             distributions /= K.sum(distributions)
 
-            # TODO dropout distributions
+            distributions = Dropout(self.dropout)(distributions)
+
             weighted_values = K.batch_dot(distributions, values)
             encodings.append(weighted_values)
         encoding = K.concatenate(encodings)
         if self.residual:
-            encoding = x + encoding
-        # TODO Layer normalization
+            encoding = x + Dropout(self.dropout)(encoding)
 
         linear = K.dot(encoding, self.relu_kernel)
         linear = K.bias_add(linear, self.relu_bias)
         relu = K.relu(linear)
         output = super().call(relu) # Applies dense layer
-        # TODO dropout output
         if self.residual:
             output = encoding + output
-        # TODO Layer normalization
+        output = self._normalize(output)
 
         return output
 

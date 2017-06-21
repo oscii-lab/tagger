@@ -72,7 +72,7 @@ num_tags = len(tag_map.word_index) + 1
 max_len = max(w.count(' ') + 1 for w in texts)
 # max_subwords = max(w.count(' ') + 1 for s in subworder.values() for w in s)
 lstm_size = 150
-word_dim = 50
+word_dim = 64
 char_size = 50
 
 
@@ -119,9 +119,8 @@ def make(dropout=0, k=1, tag_twice=False):
 
     # Build a convolutional network
     encoded_words = embedded_words
-    for i in range(3):
-        encoded_words = Transformer(1024, residual=i>0)(encoded_words)
-        encoded_words = BatchNormalization()(encoded_words)
+    for i in range(6):
+        encoded_words = Transformer(word_dim, residual=True)(encoded_words)
 
     # bi_encoded_words = encoder(embedded_words)
     # encoded_words = TimeDistributed(Dense(lstm_size,activation='tanh'))(bi_encoded_words)
