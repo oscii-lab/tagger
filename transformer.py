@@ -3,10 +3,10 @@
 from keras import backend as K
 from keras.engine import Layer, InputSpec
 from keras.layers.core import Dense, Dropout
+from keras.activations import softmax
+
 import numpy as np
 import tensorflow as tf
-
-
 
 
 class Transformer(Dense):
@@ -54,12 +54,14 @@ class Transformer(Dense):
                                initializer=self.kernel_initializer,
                                regularizer=self.kernel_regularizer,
                                constraint=self.kernel_constraint)
-    def _normalize(self, inputs):
-       mean = tf.reduce_mean(inputs, -1, keep_dims=True)
-       deviation = inputs - mean
-       x = tf.square(deviation)
-       stdDev = tf.sqrt(tf.reduce_mean(x, axis=2, keep_dims=True))
-       return (self.g / stdDev) * deviation + self.b
+
+    def _normalize(self, inputs, suffix=''):
+        mean = tf.reduce_mean(inputs, -1, keep_dims=True)
+        deviation = inputs - mean
+        x = tf.square(deviation)
+        stdDev = tf.sqrt(tf.reduce_mean(x, axis=2, keep_dims=True))
+        g, b = [getattr(self, var + suffix) for var in ['g', 'b']]
+        return (g / stdDev) * deviation + b
 
     def build(self, input_shape):
         shapes = self._expand_qkv(input_shape)
@@ -72,8 +74,10 @@ class Transformer(Dense):
                 self._add('vp_%d' % i, (vdim, self.projected_dim)),
             ])
 
-        self.g = self._add('g', (self.units,))
-        self.b = self._add('b', (self.units,))
+        self.g1 = self._add('g1', (self.units,))
+        self.b1 = self._add('b1', (self.units,))
+        self.g2 = self._add('g2', (self.units,))
+        self.b2 = self._add('b2', (self.units,))
         self.relu_kernel = self._add('relu_kernel', (self.units, self.hidden_units))
         self.relu_bias = self._add('relu_bias', (self.hidden_units,))
         super().build(list(shapes[0])[:-1] + [self.units]) # Dense after relu
@@ -92,20 +96,21 @@ class Transformer(Dense):
             keys = K.dot(k, kp)
             values = K.dot(v, vp)
             logits = K.batch_dot(queries, K.permute_dimensions(keys, [0, 2, 1]))
-            distributions = K.softmax(logits / np.sqrt(self.projected_dim))
+            distributions = softmax(logits / np.sqrt(self.projected_dim), axis=-1)
 
             # Make it impossible to attend to masked values.
             key_mask = K.any(K.not_equal(k, self.mask_value), axis=-1, keepdims=True)
             distributions *= K.cast(key_mask, K.floatx())
-            distributions /= K.sum(distributions)
+            distributions /= K.expand_dims(K.sum(distributions, axis=-1), axis=-1)
 
             distributions = Dropout(self.dropout)(distributions)
 
-            weighted_values = K.batch_dot(distributions, values)
-            encodings.append(weighted_values)
+            encoding = K.batch_dot(distributions, values)
+            encodings.append(encoding)
         encoding = K.concatenate(encodings)
         if self.residual:
             encoding = x + Dropout(self.dropout)(encoding)
+        encoding = self._normalize(encoding, '1')
 
         linear = K.dot(encoding, self.relu_kernel)
         linear = K.bias_add(linear, self.relu_bias)
@@ -113,7 +118,7 @@ class Transformer(Dense):
         output = super().call(relu) # Applies dense layer
         if self.residual:
             output = encoding + output
-        output = self._normalize(output)
+        output = self._normalize(output, '2')
 
         return output
 
