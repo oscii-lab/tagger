@@ -56,18 +56,6 @@ num_layers = 3
 
 chars = Input(shape=(None, max_word_len), dtype='int32')
 
-#
-# def LayerNormalize(inputs):
-#     g = Dense(word_size)(K.constant(0,shape=(word_size,)))
-#     b = Dense(word_size)(K.constant(0,shape=(word_size,)))
-#     mean = tf.reduce_mean(inputs, -1, keep_dims=True)
-#
-#     deviation = inputs - mean
-#     x = tf.square(deviation)
-#     stdDev = tf.sqrt(tf.reduce_mean(x, axis = 2, keep_dims=True))
-#
-#     return (g / stdDev) * deviation + b
-
 def create_model():
     """Return a model."""
     char_embedding = Embedding(input_dim=num_chars,
@@ -84,8 +72,7 @@ def create_model():
         embed_conv_words = Activation('relu')(embed_conv_words)
         embedded_words = Lambda(lambda x: K.sum(x,axis = -2))(embed_conv_words)
         embedded_words = word_encoder(embedded_words)
-    else:
-
+    elif char_encoder == 'lstm':
         char_context = Bidirectional(LSTM(lstm_size))
         word_encoder = Dense(word_size)
         embedded_words = word_encoder(TimeDistributed(char_context)(embedded_chars))
@@ -96,17 +83,16 @@ def create_model():
         context_encoder = Dense(word_size, activation='tanh')
         embedded_contexts = context_encoder(word_context(Masking()(embedded_words)))
     elif model_type == 'transformer':
-        embedded_contexts = Dropout(.1)(AddPositionEncodings(embedded_words))
+        embedded_contexts = Dropout(.1)(Lambda(factored_position_embeddings)(embedded_words))
         for i in range(num_layers):
             embedded_contexts = Transformer(word_size, residual=True)(embedded_contexts)
-    # embedded_words_and_position = Dropout(.1)(AddPositionEncodings(embedded_words))
     embedded_contexts = merge([embedded_contexts,embedded_words], mode='sum')
 
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
 
-    #optimizer = optimizers.SGD(lr=0.2, momentum=0.95)
-    optimizer = optimizers.Adam()
+    optimizer = optimizers.SGD(lr=0.01, momentum=0.95)
+    # optimizer = optimizers.Adam()
     model = Model(inputs=chars, outputs=tags)
     model.compile(optimizer, categorical_crossentropy)
     return model
@@ -170,7 +156,6 @@ def choose_bin(tagged):
 
 def grouped_batches(examples):
     """Generate batches grouped by length."""
-    # TODO fn could be paramaterized by choose_bin, prep, and the yield condition.
     groups = {}
     for example in examples:
         bin_len = choose_bin(example)
@@ -241,8 +226,6 @@ def train(model):
                             epochs=k,
                             initial_epoch=k-1,
                             callbacks=[])
-        with open(output_dir() + '/log.txt', 'a') as log:
-            acc = compute_accuracy(model, 'train', k, val_accs, log, train_plain[0][:1000],train_plain[1][:1000])
         if k > 4:
             with open(output_dir() + '/log.txt', 'a') as log:
                 acc = compute_accuracy(model, 'val', k, val_accs, log, *val)

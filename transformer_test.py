@@ -31,11 +31,15 @@ from keras import backend as K
 from position import *
 from transformer import *
 
-num_digits = 6
-digit_len = 10
+# HACK https://stackoverflow.com/questions/42969779/keras-error-you-must-feed-a-value-for-placeholder-tensor-bidirectional-1-keras
+from keras import backend as K
+K.set_learning_phase(1) #set learning phase
+
+num_digits = 4
+digit_len = 20
 embed_dim = 256
 num_layers = 1
-delay = 3
+delay = 7
 data_len = 10000
 epochs = 100
 learning_rate = 0.1
@@ -80,7 +84,7 @@ def create_model(embed_positions=None, get_encoder=None):
     model.compile(optimizer, categorical_crossentropy)
     return model
 
-get_transformer = lambda: Transformer(embed_dim, heads=2, residual=True)
-get_lstm = lambda: Bidirectional(LSTM(embed_dim//2, return_sequences=True))
-model = create_model(absolute_position_embeddings, get_transformer)
+get_transformer = lambda: Transformer(embed_dim, heads=8, residual=True, dropout=0)
+get_lstm = lambda: Bidirectional(LSTM(embed_dim // 2, return_sequences=True))
+model = create_model(None, get_lstm)
 model.fit(x, y, epochs=epochs)

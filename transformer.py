@@ -30,7 +30,7 @@ class Transformer(Dense):
         self.projected_dim = units // heads
         self.residual = residual
         self.mask_value = mask_value
-        self.dropout = dropout
+        self.dropout = Dropout(dropout)
         kwargs['use_bias'] = True
         super().__init__(units, **kwargs)
 
@@ -103,13 +103,13 @@ class Transformer(Dense):
             distributions *= K.cast(key_mask, K.floatx())
             distributions /= K.expand_dims(K.sum(distributions, axis=-1), axis=-1)
 
-            distributions = Dropout(self.dropout)(distributions)
+            distributions = self.dropout(distributions)
 
             encoding = K.batch_dot(distributions, values)
             encodings.append(encoding)
         encoding = K.concatenate(encodings)
         if self.residual:
-            encoding = x + Dropout(self.dropout)(encoding)
+            encoding = x + self.dropout(encoding)
         encoding = self._normalize(encoding, '1')
 
         linear = K.dot(encoding, self.relu_kernel)
