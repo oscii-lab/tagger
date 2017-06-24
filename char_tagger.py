@@ -91,7 +91,7 @@ def create_model():
     tagger = Dense(num_tags, activation='softmax')
     tags = tagger(embedded_contexts)
 
-    optimizer = optimizers.SGD(lr=0.01, momentum=0.95)
+    optimizer = optimizers.SGD(lr=0.1, momentum=0.95)
     # optimizer = optimizers.Adam()
     model = Model(inputs=chars, outputs=tags)
     model.compile(optimizer, categorical_crossentropy)
@@ -171,8 +171,6 @@ def list_tagged(corpus):
     return list(tagged_sents([corpus]))
 
 train_list = list_tagged(ptb_train)
-train_plain = prep(list_tagged(ptb_train))
-
 val = prep(list_tagged(ptb_dev))
 test = prep(list_tagged(ptb_test))
 

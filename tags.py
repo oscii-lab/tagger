@@ -20,10 +20,10 @@ ptb_root = 'data/eng_news_txt_tbnk-ptb'
 # ptb_test = reader(ptb_root, r'(22|23|24)/wsj_.*tree')
 # ptb_all = reader(ptb_root, r'[0-9]*/wsj_.*tree')
 
-ptb_train = reader(ptb_root, r'(18)/.*mrg')
-ptb_dev = reader(ptb_root, r'(19)/wsj_.*mrg')
-ptb_test = reader(ptb_root, r'(22)/wsj_.*mrg')
-ptb_all = reader(ptb_root, r'(18)/wsj_.*mrg')
+ptb_train = reader(ptb_root, r'(0[0-9]|1[0-8])/.*mrg')
+ptb_dev = reader(ptb_root, r'(19|20|21)/wsj_.*mrg')
+ptb_test = reader(ptb_root, r'(22|23|24)/wsj_.*mrg')
+ptb_all = reader(ptb_root, r'[0-9]*/wsj_.*mrg')
 
 
 # web_root = 'data/eng_web_tbk/data'
